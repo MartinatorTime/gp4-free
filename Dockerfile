@@ -12,6 +12,7 @@ RUN apt-get update && \
     python3 \
     python3-pip \
     git \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Set the working directory
