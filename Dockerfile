@@ -25,7 +25,7 @@ RUN git clone --depth 1 https://github.com/xtekky/gpt4free.git .
 RUN python3 -m pip install --break-system-packages -r requirements.txt
 
 # 6. Install the gpt4free package itself
-RUN python3 -m pip install --break-system-packages .
+RUN python3 -m pip install --break-system-packages -U g4f[all]
 
 # 7. Expose the API port
 EXPOSE 1337
