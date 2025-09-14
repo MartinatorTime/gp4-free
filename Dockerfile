@@ -28,7 +28,7 @@ RUN python3 -m pip install --break-system-packages -r requirements.txt
 RUN python3 -m pip install --break-system-packages .
 
 # 7. Expose the API port
-EXPOSE 1337
+EXPOSE 8080
 
 # 8. Set the default command to run the FastAPI server
-CMD ["python3", "-m", "g4f"]
+CMD ["python3", "-m", "g4f", "--port", "8080", "--debug"]
