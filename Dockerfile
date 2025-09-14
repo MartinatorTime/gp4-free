@@ -1,32 +1,24 @@
-# 1. Use Debian 12 (Bookworm) which has Python 3.11 as default
-FROM debian:bookworm
+# Use Python slim image for smaller size
+FROM python:3.11-slim
 
-# Set environment variables for non-interactive installation
+# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=off \
     DEBIAN_FRONTEND=noninteractive
 
-# 2. Update and install necessary system packages.
+# Install system dependencies and clean up in one layer
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
     git \
     ffmpeg \
+    && pip install --no-cache-dir --upgrade pip \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Set the working directory
 WORKDIR /app
 
-# 4. Clone the gpt4free repository
-RUN git clone --depth 1 https://github.com/xtekky/gpt4free.git .
-
-# 5. Install Python dependencies, breaking the system-packages lock
-# This is safe inside a container.
-RUN python3 -m pip install --break-system-packages -r requirements.txt
-
-# 6. Install the gpt4free package itself
-RUN python3 -m pip install --break-system-packages -U g4f[all]
+# Clone repo and install dependencies in one layer
+RUN git clone --depth 1 https://github.com/xtekky/gpt4free.git . && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -U g4f[all]
 
 # 7. Expose the API port
 EXPOSE 1337
