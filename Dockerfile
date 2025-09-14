@@ -31,4 +31,4 @@ RUN python3 -m pip install --break-system-packages .
 EXPOSE 1337
 
 # 8. Set the default command to run the FastAPI server
-CMD ["python3", "-m", "g4f", "--port", "1337"]
+CMD ["python3", "-m", "g4f"]
