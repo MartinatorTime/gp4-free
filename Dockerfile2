@@ -1,0 +1,40 @@
+# Use Python slim image for smaller size
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    G4F_PROXY="" \
+    G4F_COOKIES_PATH="/root/.config/g4f/cookies/.env" \
+    NO_SANDBOX=1
+
+# Install system dependencies and clean up in one layer
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    ffmpeg \
+    chromium \
+    && pip install --no-cache-dir --upgrade pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Clone repo and install dependencies in one layer
+RUN git clone --depth 1 https://github.com/xtekky/gpt4free.git . && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -U g4f[all] && \
+    apt-get purge -y --auto-remove git && \
+    rm -rf .git /var/lib/apt/lists/*
+
+# Ensure the cookies directory exists
+RUN mkdir -p /root/.config/g4f/cookies/
+
+# Create run_api.py script with deprecation warning suppression and provider blacklist
+RUN echo "import warnings\nwarnings.filterwarnings(\"ignore\", message=\"'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated\")\n\nimport g4f.api\n\ndef main():\n    g4f.api.run_api(debug=True)\n\nif __name__ == \"__main__\":\n    main()" > run_api.py && \
+    echo "\n# Blacklist PuterJS and OpenRouter\nimport g4f.providers\n\ng4f.providers.Provider.blacklist.extend(['PuterJS', 'OpenRouter'])" >> run_api.py
+
+# Expose the API port
+EXPOSE 1337
+
+# Set the default command to run the FastAPI server using the script
+CMD ["python3", "run_api.py", "--debug"]
