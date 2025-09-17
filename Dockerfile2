@@ -29,7 +29,7 @@ RUN git clone --depth 1 https://github.com/xtekky/gpt4free.git . && \
 # Ensure the cookies directory exists
 RUN mkdir -p /root/.config/g4f/cookies/
 
-# Expose the API port
+#  Expose the API port
 EXPOSE 8080
 
 CMD ["python3", "g4f_cli.py", "api", "-d", "-p", "8080", "-ng", "--timeout", "60", "--ignored-providers", "PuterJS", "Azure", "BingCreateImages", "CopilotAccount", "Gemini", "GeminiCLI", "GeminiPro", "HuggingFace", "HuggingFaceMedia", "HuggingFaceAPI", "LMArena", "Groq", "MetaAI", "MicrosoftDesigner", "OpenaiAccount", "OpenaiChat", "OpenRouter"]
