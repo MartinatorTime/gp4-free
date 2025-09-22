@@ -6,10 +6,11 @@ export default {
 
 async function handleRequest(request, env) {
   const REAL_API_URL = 'https://rsps.westeurope.cloudapp.azure.com';
-  const TIME_DEDUCT = parseInt(env.TIME) || 0;
+  const TIME_DEDUCT = parseInt(env.REGISTER_TIME_DEDUCT) || 0;
   const UNIX_DEDUCT = parseInt(env.UNIX_DEDUCT) || 0;
   const REGISTER_DEDUCT = parseInt(env.REGISTER_DEDUCT) || 0; // New environment variable
   const FAKE_TICKET = parseInt(env.FAKE_TICKET) || 0; // New environment variable for fake ticket
+  const RANDOM_TICKET_ID = parseInt(env.RANDOM_TICKET_ID) || 0; // New environment variable for randomizing vehicle numbers
   const requestUrl = new URL(request.url);
 
   // --- 1. Log Incoming Request from Client ---
@@ -65,128 +66,133 @@ async function handleRequest(request, env) {
 
   // Check if FAKE_TICKET is enabled and intercept GET /api/Tickets/get
   // This check is placed first to ensure it takes precedence and no request is sent to origin server
-  if (FAKE_TICKET !== 0 && request.method === 'GET' && requestUrl.pathname === '/api/Tickets/get') {
-    const now = Math.floor(Date.now() / 1000);
-    const validPeriod = 30 * 24 * 60 * 60; // 30 days in seconds
-    const ONE_DAY_IN_SECONDS = 24 * 60 * 60; // 86400 seconds
-    const fakeTicketResponse = [{
-      "type_name": "timed_month",
-      "valid_from": null,
-      "valid_till": null,
-      "valid_period": null,
-      "id": "375ae82f-9610-4f9f-a8c5-ee27b0ad11d0",
-      "type_id": "9b980fae-e8b2-4c0b-91ee-3f85d05a2738",
-      "purchase_time": now,
-      "key_id": "00000000-0000-0000-0000-000000000000",
-      "transaction_id": "87d28aff-d989-43ad-95d2-9cac141f3799",
-      "batch_number": 40447,
-      "is_annulled": false,
-      "signed_ids": "Hma4mQm9fWxAZ7Aaua0l9HcyKqaV4/PuoJdaOfFAvQvs3TqeW0umeJ4Om3ghDmegiRZhwf3Tw3ur8iFxuRqJBQ==",
-      "activated": now - ONE_DAY_IN_SECONDS, // Set activated time to 1 day before current time
-      "trips": [
-        {
-          "id": "8440cbfe-b550-4c7c-97b6-e410940736ba",
-          "time": now + validPeriod,
-          "vehicle_nr": "17998",
-          "ticket_id": "375ae82f-9610-4f9f-a8c5-ee27b0ad11d0",
-          "signature": "0jaKtnGWQwahPz1mJRGFpGdwOLNRqVqmhS4Qnsmm2dIM9mPKI5V8pbikhjK1000uTp0L0FIe+USYkxX4K9wrBg=="
-        }
-      ],
-      "expiry_time": now + validPeriod
-    }];
+  if (FAKE_TICKET !== 0) {
+    if (request.method === 'GET' && requestUrl.pathname === '/api/Tickets/get') {
+      const now = Math.floor(Date.now() / 1000);
+      const validPeriod = 30 * 24 * 60 * 60; // 30 days in seconds
+      const ONE_DAY_IN_SECONDS = 24 * 60 * 60; // 86400 seconds
+      const fakeTicketResponse = [{
+        "type_name": "timed_month",
+        "valid_from": null,
+        "valid_till": null,
+        "valid_period": null,
+        "id": "375ae82f-9610-4f9f-a8c5-ee27b0ad11d0",
+        "type_id": "9b980fae-e8b2-4c0b-91ee-3f85d05a2738",
+        "purchase_time": now,
+        "key_id": "00000000-0000-0000-0000-000000000000",
+        "transaction_id": "87d28aff-d989-43ad-95d2-9cac141f3799",
+        "batch_number": 40447,
+        "is_annulled": false,
+        "signed_ids": "Hma4mQm9fWxAZ7Aaua0l9HcyKqaV4/PuoJdaOfFAvQvs3TqeW0umeJ4Om3ghDmegiRZhwf3Tw3ur8iFxuRqJBQ==",
+        "activated": now - ONE_DAY_IN_SECONDS, // Set activated time to 1 day before current time
+        "trips": [
+          {
+            "id": "8440cbfe-b550-4c7c-97b6-e410940736ba",
+            "time": now + validPeriod,
+            "vehicle_nr": "17998",
+            "ticket_id": "375ae82f-9610-4f9f-a8c5-ee27b0ad11d0",
+            "signature": "0jaKtnGWQwahPz1mJRGFpGdwOLNRqVqmhS4Qnsmm2dIM9mPKI5V8pbikhjK1000uTp0L0FIe+USYkxX4K9wrBg=="
+          }
+        ],
+        "expiry_time": now + validPeriod
+      }];
 
-    const logMessage = `[${new Date().toISOString()}] Fake Ticket Response (no request to origin server): ${JSON.stringify(fakeTicketResponse)}`;
-    console.log(logMessage);
-    if (env.D1_LOGS !== '0') await logToD1(env, logMessage);
+      const logMessage = `[${new Date().toISOString()}] Fake Ticket Response (no request to origin server): ${JSON.stringify(fakeTicketResponse)}`;
+      console.log(logMessage);
+      if (env.D1_LOGS !== '0') await logToD1(env, logMessage);
 
-    return new Response(JSON.stringify(fakeTicketResponse), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  // Check if ACT_AS_SERVER is set to 1 and intercept POST /api/Trip/register
-  if (env.ACT_AS_SERVER === '1' && request.method === 'POST' && requestUrl.pathname === '/api/Trip/register') {
-    // Apply REGISTER_DEDUCT only when ACT_AS_SERVER is 1
-    if (REGISTER_DEDUCT !== 0) {
-      try {
-        const requestBodyJson = JSON.parse(requestBody);
-        requestBodyJson.time = (parseInt(requestBodyJson.time) - REGISTER_DEDUCT).toString();
-        requestBody = JSON.stringify(requestBodyJson);
-      } catch (e) {
-        console.error("Error applying REGISTER_DEDUCT:", e);
-      }
-    }
-    
-    try {
-      // Ensure trips table exists
-      await createTripsTable(env);
-      
-      const requestBodyJson = JSON.parse(requestBody);
-      
-      const responseBody = {
-        id: crypto.randomUUID(),
-        time: parseInt(requestBodyJson.time), // Ensure time is an integer
-        vehicle_nr: requestBodyJson.vehicle_nr,
-        ticket_id: requestBodyJson.ticket_id,
-        signature: requestBodyJson.signature
-      };
-      const logMessage7 = `[${new Date().toISOString()}] Origin Response Body: ${JSON.stringify(responseBody, null, 2)}`; // Pretty print the response body
-      console.log(logMessage7);
-      if (env.D1_LOGS !== '0') await logToD1(env, logMessage7);
-      
-      // Save the trip data to D1 for later use
-      await saveTripData(env, responseBody);
-      
-      return new Response(JSON.stringify(responseBody), {
+      return new Response(JSON.stringify(fakeTicketResponse), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
-    } catch (e) {
-      const logMessage8 = `[${new Date().toISOString()}] Error parsing request body for /api/Trip/register. Returning 500. ${e}`;
-      console.error(logMessage8);
-      if (env.D1_LOGS !== '0') await logToD1(env, logMessage8);
-      return new Response("Internal Server Error", { status: 500 });
     }
   }
 
-  // Check if ACT_AS_SERVER is set to 1 and intercept GET /api/Tickets/get
-  if (env.ACT_AS_SERVER === '1' && request.method === 'GET' && requestUrl.pathname === '/api/Tickets/get') {
-    try {
-      // Ensure trips table exists
-      await createTripsTable(env);
-      
-      // Fetch real ticket data from the origin server
-      const originResponse = await fetch(REAL_API_URL + '/api/Tickets/get', {
-        method: 'GET',
-        headers: headersToForward
-      });
-      
-      if (originResponse.ok) {
-        const ticketData = await originResponse.json();
-        
-        // Get saved trips from D1
-        const savedTrips = await getSavedTrips(env);
-        
-        // Add saved trips to the ticket data
-        if (ticketData.length > 0 && ticketData[0].trips && savedTrips.length > 0) {
-          // Add saved trips to the beginning of the trips array
-          ticketData[0].trips = [...savedTrips, ...ticketData[0].trips];
+  // Check if ACT_AS_SERVER is set to 1 and intercept POST /api/Trip/register
+  const IS_ACTING_AS_SERVER = env.ACT_AS_SERVER === '1';
+  if (IS_ACTING_AS_SERVER) {
+    if (request.method === 'POST' && requestUrl.pathname === '/api/Trip/register') {
+      // Apply REGISTER_DEDUCT only when ACT_AS_SERVER is 1
+      if (REGISTER_DEDUCT !== 0) {
+        try {
+          const requestBodyJson = JSON.parse(requestBody);
+          requestBodyJson.time = (parseInt(requestBodyJson.time) - REGISTER_DEDUCT).toString();
+          requestBody = JSON.stringify(requestBodyJson);
+        } catch (e) {
+          console.error("Error applying REGISTER_DEDUCT:", e);
         }
+      }
+      
+      try {
+        // Ensure trips table exists
+        await createTripsTable(env);
         
-        const logMessage = `[${new Date().toISOString()}] Modified Response Body for Client: ${JSON.stringify(ticketData)}`;
-        console.log(logMessage);
-        if (env.D1_LOGS !== '0') await logToD1(env, logMessage);
+        const requestBodyJson = JSON.parse(requestBody);
         
-        return new Response(JSON.stringify(ticketData), {
+        const responseBody = {
+          id: crypto.randomUUID(),
+          time: parseInt(requestBodyJson.time), // Ensure time is an integer
+          vehicle_nr: requestBodyJson.vehicle_nr,
+          ticket_id: requestBodyJson.ticket_id,
+          signature: requestBodyJson.signature
+        };
+        const logMessage7 = `[${new Date().toISOString()}] Origin Response Body: ${JSON.stringify(responseBody, null, 2)}`; // Pretty print the response body
+        console.log(logMessage7);
+        if (env.D1_LOGS !== '0') await logToD1(env, logMessage7);
+        
+        // Save the trip data to D1 for later use
+        await saveTripData(env, responseBody);
+        
+        return new Response(JSON.stringify(responseBody), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         });
+      } catch (e) {
+        const logMessage8 = `[${new Date().toISOString()}] Error parsing request body for /api/Trip/register. Returning 500. ${e}`;
+        console.error(logMessage8);
+        if (env.D1_LOGS !== '0') await logToD1(env, logMessage8);
+        return new Response("Internal Server Error", { status: 500 });
       }
-    } catch (e) {
-      const logMessage = `[${new Date().toISOString()}] Error retrieving or modifying ticket data. ${e}`;
-      console.error(logMessage);
-      if (env.D1_LOGS !== '0') await logToD1(env, logMessage);
+    }
+
+    // Check if ACT_AS_SERVER is set to 1 and intercept GET /api/Tickets/get
+    if (request.method === 'GET' && requestUrl.pathname === '/api/Tickets/get') {
+      try {
+        // Ensure trips table exists
+        await createTripsTable(env);
+        
+        // Fetch real ticket data from the origin server
+        const originResponse = await fetch(REAL_API_URL + '/api/Tickets/get', {
+          method: 'GET',
+          headers: headersToForward
+        });
+        
+        if (originResponse.ok) {
+          const ticketData = await originResponse.json();
+          
+          // Get saved trips from D1
+          const savedTrips = await getSavedTrips(env);
+          
+          // Add saved trips to the ticket data
+          if (ticketData.length > 0 && ticketData[0].trips && savedTrips.length > 0) {
+            // Add saved trips to the beginning of the trips array
+            ticketData[0].trips = [...savedTrips, ...ticketData[0].trips];
+          }
+          
+          const logMessage = `[${new Date().toISOString()}] Modified Response Body for Client: ${JSON.stringify(ticketData)}`;
+          console.log(logMessage);
+          if (env.D1_LOGS !== '0') await logToD1(env, logMessage);
+          
+          return new Response(JSON.stringify(ticketData), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      } catch (e) {
+        const logMessage = `[${new Date().toISOString()}] Error retrieving or modifying ticket data. ${e}`;
+        console.error(logMessage);
+        if (env.D1_LOGS !== '0') await logToD1(env, logMessage);
+      }
     }
   }
 
@@ -217,28 +223,39 @@ async function handleRequest(request, env) {
   // --- 5. Conditionally Modify the Response ---
   if (requestUrl.pathname === '/api/Tickets/get' && response.ok) {
     try {
-      const responseBodyJson = JSON.parse(responseBody);
+      let responseBodyObj = JSON.parse(responseBody);
 
       if (env.ACT_AS_SERVER === '1') {
         // When acting as server, get saved trips from D1 and prepend them
         const savedTrips = await getSavedTrips(env);
-        if (savedTrips.length > 0 && responseBodyJson.length > 0 && responseBodyJson[0].trips) {
-          responseBodyJson[0].trips = [...savedTrips, ...responseBodyJson[0].trips];
+        if (savedTrips.length > 0 && responseBodyObj.length > 0 && responseBodyObj[0].trips) {
+          responseBodyObj[0].trips = [...savedTrips, ...responseBodyObj[0].trips];
         }
-      } else if (responseBodyJson.length > 0 && responseBodyJson[0].trips && responseBodyJson[0].trips.length > 0) {
+      } else if (responseBodyObj.length > 0 && responseBodyObj[0].trips && responseBodyObj[0].trips.length > 0) {
         // Modify the first trip's time
-        responseBodyJson[0].trips[0].time -= TIME_DEDUCT;
-
-        // Modify the vehicle_nr of all subsequent trips
-        const prefixes = [17, 16, 57, 35];
-        for (let i = 1; i < responseBodyJson[0].trips.length; i++) {
-          const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-          const suffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-          responseBodyJson[0].trips[i].vehicle_nr = (prefix + suffix).toString();
+        responseBodyObj[0].trips[0].time -= TIME_DEDUCT;
+        
+        // Only randomize vehicle numbers if RANDOM_TICKET_ID is not zero
+        if (RANDOM_TICKET_ID !== 0) {
+          const logMessageRandom = `[${new Date().toISOString()}] Randomizing vehicle numbers as RANDOM_TICKET_ID is not zero`;
+          console.log(logMessageRandom);
+          if (env.D1_LOGS !== '0') await logToD1(env, logMessageRandom);
+          
+          // Modify the vehicle_nr of all subsequent trips
+          const prefixes = [17, 16, 57, 35];
+          for (let i = 1; i < responseBodyObj[0].trips.length; i++) {
+            const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+            const suffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+            responseBodyObj[0].trips[i].vehicle_nr = (prefix + suffix).toString();
+            
+            // Modify the time of each trip
+            const timeOffset = Math.floor(Math.random() * (10 + 10)) - 10; // Random offset between -10 and +10 minutes
+            responseBodyObj[0].trips[i].time += timeOffset * 60; // Convert minutes to seconds
+          }
         }
       }
 
-      const modifiedResponseBody = JSON.stringify(responseBodyJson);
+      const modifiedResponseBody = JSON.stringify(responseBodyObj);
       const logMessage12 = `[${new Date().toISOString()}] Modified Response Body for Client: ${modifiedResponseBody}`;
       console.log(logMessage12);
       if (env.D1_LOGS !== '0') await logToD1(env, logMessage12);
