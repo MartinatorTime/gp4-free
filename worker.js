@@ -9,6 +9,7 @@ async function handleRequest(request, env) {
   const TIME_DEDUCT = parseInt(env.TIME) || 0;
   const UNIX_DEDUCT = parseInt(env.UNIX_DEDUCT) || 0;
   const REGISTER_DEDUCT = parseInt(env.REGISTER_DEDUCT) || 0; // New environment variable
+  const FAKE_TICKET = parseInt(env.FAKE_TICKET) || 0; // New environment variable for fake ticket
   const requestUrl = new URL(request.url);
 
   // --- 1. Log Incoming Request from Client ---
@@ -62,19 +63,61 @@ async function handleRequest(request, env) {
   // --- 3. Forward the Sanitized Request to Origin Server ---
   const originUrl = REAL_API_URL + requestUrl.pathname + requestUrl.search;
 
-  // Apply REGISTER_DEDUCT for POST /api/Trip/register regardless of ACT_AS_SERVER
-  if (REGISTER_DEDUCT !== 0 && request.method === 'POST' && requestUrl.pathname === '/api/Trip/register') {
-    try {
-      const requestBodyJson = JSON.parse(requestBody);
-      requestBodyJson.time = (parseInt(requestBodyJson.time) - REGISTER_DEDUCT).toString();
-      requestBody = JSON.stringify(requestBodyJson);
-    } catch (e) {
-      console.error("Error applying REGISTER_DEDUCT:", e);
-    }
+  // Check if FAKE_TICKET is enabled and intercept GET /api/Tickets/get
+  // This check is placed first to ensure it takes precedence and no request is sent to origin server
+  if (FAKE_TICKET !== 0 && request.method === 'GET' && requestUrl.pathname === '/api/Tickets/get') {
+    const now = Math.floor(Date.now() / 1000);
+    const validPeriod = 30 * 24 * 60 * 60; // 30 days in seconds
+    const ONE_DAY_IN_SECONDS = 24 * 60 * 60; // 86400 seconds
+    const fakeTicketResponse = [{
+      "type_name": "timed_month",
+      "valid_from": null,
+      "valid_till": null,
+      "valid_period": null,
+      "id": "375ae82f-9610-4f9f-a8c5-ee27b0ad11d0",
+      "type_id": "9b980fae-e8b2-4c0b-91ee-3f85d05a2738",
+      "purchase_time": now,
+      "key_id": "00000000-0000-0000-0000-000000000000",
+      "transaction_id": "87d28aff-d989-43ad-95d2-9cac141f3799",
+      "batch_number": 40447,
+      "is_annulled": false,
+      "signed_ids": "Hma4mQm9fWxAZ7Aaua0l9HcyKqaV4/PuoJdaOfFAvQvs3TqeW0umeJ4Om3ghDmegiRZhwf3Tw3ur8iFxuRqJBQ==",
+      "activated": now - ONE_DAY_IN_SECONDS, // Set activated time to 1 day before current time
+      "trips": [
+        {
+          "id": "8440cbfe-b550-4c7c-97b6-e410940736ba",
+          "time": now + validPeriod,
+          "vehicle_nr": "17998",
+          "ticket_id": "375ae82f-9610-4f9f-a8c5-ee27b0ad11d0",
+          "signature": "0jaKtnGWQwahPz1mJRGFpGdwOLNRqVqmhS4Qnsmm2dIM9mPKI5V8pbikhjK1000uTp0L0FIe+USYkxX4K9wrBg=="
+        }
+      ],
+      "expiry_time": now + validPeriod
+    }];
+
+    const logMessage = `[${new Date().toISOString()}] Fake Ticket Response (no request to origin server): ${JSON.stringify(fakeTicketResponse)}`;
+    console.log(logMessage);
+    if (env.D1_LOGS !== '0') await logToD1(env, logMessage);
+
+    return new Response(JSON.stringify(fakeTicketResponse), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 
   // Check if ACT_AS_SERVER is set to 1 and intercept POST /api/Trip/register
   if (env.ACT_AS_SERVER === '1' && request.method === 'POST' && requestUrl.pathname === '/api/Trip/register') {
+    // Apply REGISTER_DEDUCT only when ACT_AS_SERVER is 1
+    if (REGISTER_DEDUCT !== 0) {
+      try {
+        const requestBodyJson = JSON.parse(requestBody);
+        requestBodyJson.time = (parseInt(requestBodyJson.time) - REGISTER_DEDUCT).toString();
+        requestBody = JSON.stringify(requestBodyJson);
+      } catch (e) {
+        console.error("Error applying REGISTER_DEDUCT:", e);
+      }
+    }
+    
     try {
       // Ensure trips table exists
       await createTripsTable(env);
