@@ -1,0 +1,106 @@
+export default {
+  async fetch(request, env) {
+    return await handleRequest(request, env);
+  }
+};
+
+async function handleRequest(request, env) {
+  const REAL_API_URL = 'https://rsps.westeurope.cloudapp.azure.com';
+  const TIME_DEDUCT = parseInt(env.TIME) || 0;
+  const requestUrl = new URL(request.url);
+
+  // --- 1. Log Incoming Request from Client ---
+  console.log(`--- New Request ---`);
+  console.log(`Received: ${request.method} ${requestUrl.pathname}${requestUrl.search}`);
+  console.log("Original Headers from Client:", JSON.stringify(Object.fromEntries(request.headers), null, 2));
+
+  let requestBody = null;
+  const hasBody = ['POST', 'PUT', 'PATCH'].includes(request.method);
+  if (hasBody) {
+    try {
+      requestBody = await request.clone().text();
+      console.log("Incoming Request Body:", requestBody);
+    } catch (e) {
+      console.error("Error reading request body:", e);
+    }
+  }
+
+  // --- 2. Sanitize Headers Before Forwarding ---
+  const headersToForward = new Headers(request.headers);
+  const headersToRemove = [
+    'cf-connecting-ip',
+    'cf-ipcountry',
+    'cf-ray',
+    'cf-visitor',
+    'x-forwarded-proto',
+    'x-real-ip',
+    'x-forwarded-for'
+  ];
+
+  headersToRemove.forEach(header => {
+    headersToForward.delete(header);
+  });
+
+  console.log("Sanitized Headers Forwarded to Origin:", JSON.stringify(Object.fromEntries(headersToForward), null, 2));
+
+
+  // --- 3. Forward the Sanitized Request to Origin Server ---
+  const originUrl = REAL_API_URL + requestUrl.pathname + requestUrl.search;
+
+  const requestInit = {
+    method: request.method,
+    headers: headersToForward,
+    // Add the body back if it exists
+    body: requestBody
+  };
+
+  const response = await fetch(originUrl, requestInit);
+
+
+  // --- 4. Log the Response from Origin Server ---
+  console.log(`Origin Response Status: ${response.status}`);
+  console.log("Origin Response Headers:", JSON.stringify(Object.fromEntries(response.headers), null, 2));
+
+  // Clone the response to be able to read the body for logging and for subsequent logic.
+  const responseBody = await response.clone().text();
+  console.log(`Origin Response Body: ${responseBody}`);
+
+
+  // --- 5. Conditionally Modify the Response ---
+  if (requestUrl.pathname === '/api/Tickets/get' && response.ok) {
+    try {
+      const responseBodyJson = JSON.parse(responseBody);
+
+      if (responseBodyJson.length > 0 && responseBodyJson[0].trips && responseBodyJson[0].trips.length > 0) {
+        // Modify the first trip's time
+        responseBodyJson[0].trips[0].time -= TIME_DEDUCT;
+
+        // Modify the vehicle_nr of all subsequent trips
+        const prefixes = [17, 16, 57, 35];
+        for (let i = 1; i < responseBodyJson[0].trips.length; i++) {
+          const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+          const suffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+          responseBodyJson[0].trips[i].vehicle_nr = (prefix + suffix).toString();
+        }
+      }
+
+      const modifiedResponseBody = JSON.stringify(responseBodyJson);
+      console.log(`Modified Response Body for Client: ${modifiedResponseBody}`);
+
+      // Return a new response with the modified body
+      return new Response(modifiedResponseBody, {
+        status: response.status,
+        headers: response.headers
+      });
+
+    } catch (e) {
+      console.error("Error modifying JSON for /api/Tickets/get. Returning original response.", e);
+      // If parsing or modification fails, return the original response to avoid errors.
+      return response;
+    }
+  }
+
+  // --- 6. Return the Original Response for all other requests ---
+  console.log("Returning original response to client.");
+  return response;
+}
