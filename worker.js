@@ -225,29 +225,31 @@ async function handleRequest(request, env) {
     try {
       let responseBodyObj = JSON.parse(responseBody);
 
+      // When acting as server, get saved trips from D1 and prepend them
       if (env.ACT_AS_SERVER === '1') {
-        // When acting as server, get saved trips from D1 and prepend them
         const savedTrips = await getSavedTrips(env);
         if (savedTrips.length > 0 && responseBodyObj.length > 0 && responseBodyObj[0].trips) {
           responseBodyObj[0].trips = [...savedTrips, ...responseBodyObj[0].trips];
         }
-      } else if (responseBodyObj.length > 0 && responseBodyObj[0].trips && responseBodyObj[0].trips.length > 0) {
-        // Modify the first trip's time
+      }
+
+      // Modify the first trip's time
+      if (responseBodyObj.length > 0 && responseBodyObj[0].trips && responseBodyObj[0].trips.length > 0) {
         responseBodyObj[0].trips[0].time -= TIME_DEDUCT;
-        
+
         // Only randomize vehicle numbers if RANDOM_TICKET_ID is not zero
         if (RANDOM_TICKET_ID !== 0) {
           const logMessageRandom = `[${new Date().toISOString()}] Randomizing vehicle numbers as RANDOM_TICKET_ID is not zero`;
           console.log(logMessageRandom);
           if (env.D1_LOGS !== '0') await logToD1(env, logMessageRandom);
-          
+
           // Modify the vehicle_nr of all subsequent trips
           const prefixes = [17, 16, 57, 35];
           for (let i = 1; i < responseBodyObj[0].trips.length; i++) {
             const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
             const suffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
             responseBodyObj[0].trips[i].vehicle_nr = (prefix + suffix).toString();
-            
+
             // Modify the time of each trip
             const timeOffset = Math.floor(Math.random() * (10 + 10)) - 10; // Random offset between -10 and +10 minutes
             responseBodyObj[0].trips[i].time += timeOffset * 60; // Convert minutes to seconds
