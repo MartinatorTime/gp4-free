@@ -1,4 +1,3 @@
 name = "rsps"
 type = "javascript"
-main = "worker.js" 
-workers_dev = true
+main = "worker.js"
