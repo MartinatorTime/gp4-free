@@ -16,11 +16,17 @@ ACT_AS_SERVER = "1"
 D1_LOGS = "0"
 REAL_API_URL = "https://rsps.westeurope.cloudapp.azure.com"
 
-"d1_databases": [{
-    "binding": "DB",
-    "database_name": "worker-logs",
-    "database_id": "71f8947a-299e-49e2-8697-7dd4532efb1a"
- }]
+[env.dev]
+    [[env.dev.d1_databases]]
+    binding = "DB"
+    database_name = "worker-logs"
+    database_id = "71f8947a-299e-49e2-8697-7dd4532efb1a"
+
+[env.prod]
+    [[env.prod.d1_databases]]
+    binding = "DB"
+    database_name = "worker-logs"
+    database_id = "71f8947a-299e-49e2-8697-7dd4532efb1a"
 
 [observability]
 enabled = true
