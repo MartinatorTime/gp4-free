@@ -67,9 +67,9 @@ async function handleRequest(request, env) {
       const validPeriod = 30 * 24 * 60 * 60; // 30 days in seconds
       const ONE_DAY_IN_SECONDS = 24 * 60 * 60;
 
-      // Set activation time to today at 7:30
+      // Set activation time to today at 5:30
       const nowDate = new Date();
-      nowDate.setHours(7, 30, 0, 0);
+      nowDate.setHours(5, 30, 0, 0);
       const activation_time = Math.floor(nowDate.getTime() / 1000);
 
       // Get saved trips from D1 and find the latest one after activation_time
