@@ -5,7 +5,7 @@ export default {
 };
 
 async function handleRequest(request, env) {
-  const REAL_API_URL = 'https://rsps.westeurope.cloudapp.azure.com';
+  const REAL_API_URL = (parseInt(env.REAL_API_URL) || 'https://rsps.westeurope.cloudapp.azure.com');
   const TIME_DEDUCT = parseInt(env.REGISTER_TIME_DEDUCT) || 0;
   const UNIX_DEDUCT = parseInt(env.UNIX_DEDUCT) || 0;
   const REGISTER_DEDUCT = parseInt(env.REGISTER_DEDUCT) || 0;
