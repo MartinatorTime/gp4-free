@@ -1,20 +1,21 @@
 name = "rsps"
 main = "worker.js"
-compatibility_date = "2025-09-28"
-minify = false
-workers_dev = true
-no_bundle = true
-keep_names = true
+compatibility_date = "--"
+minify =
+workers_dev =
+no_bundle =
+keep_names =
 
 [vars]
-REGISTER_TIME_DEDUCT = "0"
-UNIX_DEDUCT = "0"
-REGISTER_DEDUCT = "0"
-FAKE_TICKET = "1"
-RANDOM_TICKET_ID = "1"
-ACT_AS_SERVER = "1"
-D1_LOGS = "0"
+REGISTER_TIME_DEDUCT = ""
+UNIX_DEDUCT = ""
+REGISTER_DEDUCT = ""
+FAKE_TICKET = ""
+RANDOM_TICKET_ID = ""
+ACT_AS_SERVER = ""
+D_LOGS = ""
 REAL_API_URL = "https://rsps.westeurope.cloudapp.azure.com"
 
-[d1_databases]
-logs = { binding = "DB", database_id = "71f8947a-299e-49e2-8697-7dd4532efb1a" }
+[[d_databases]]
+binding = "DB"
+database_id = "71f8947a-299e-49e2-8697-7dd4532efb1a"
