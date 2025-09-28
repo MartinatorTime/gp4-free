@@ -103,20 +103,15 @@ async function handleRequest(request, env) {
         "signed_ids": "Hma4mQm9fWxAZ7Aaua0l9HcyKqaV4/PuoJdaOfFAvQvs3TqeW0umeJ4Om3ghDmegiRZhwf3Tw3ur8iFxuRqJBQ==",
         "activated": activation_time,
         "trips": [
-          latestTrip ? {
-            "id": latestTrip.id,
-            "time": latestTrip.time,
-            "vehicle_nr": latestTrip.vehicle_nr,
-            "ticket_id": latestTrip.ticket_id,
-            "signature": latestTrip.signature
-          } : {
+          {
             "id": "8440cbfe-b550-4c7c-97b6-e410940736ba",
-            "time": now + validPeriod,
+            "time": activation_time,
             "vehicle_nr": "17998",
             "ticket_id": "375ae82f-9610-4f9f-a8c5-ee27b0ad11d0",
             "signature": "0jaKtnGWQwahPz1mJRGFpGdwOLNRqVqmhS4Qnsmm2dIM9mPKI5V8pbikhjK1000uTp0L0FIe+USYkxX4K9wrBg=="
-          }
-        ],
+          },
+          latestTrip
+        ].filter(trip => trip !== null),
         "expiry_time": now + validPeriod
       }];
 
