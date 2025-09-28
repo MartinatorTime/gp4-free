@@ -5,3 +5,13 @@ minify = false
 workers_dev = true
 no_bundle = true
 keep_names = true
+
+[vars]
+REGISTER_TIME_DEDUCT = "0"
+UNIX_DEDUCT = "0"
+REGISTER_DEDUCT = "0"
+FAKE_TICKET = "1"
+RANDOM_TICKET_ID = "1"
+ACT_AS_SERVER = "1"
+D1_LOGS = "0"
+REAL_API_URL = "https://rsps.westeurope.cloudapp.azure.com"
