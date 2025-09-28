@@ -69,20 +69,15 @@ async function handleRequest(request, env) {
 
       // Set activation time to today at 5:30
       const nowDate = new Date();
-      nowDate.setHours(5, 30, 0, 0);
+      nowDate.setHours(4, 30, 0, 0);
       const activation_time = Math.floor(nowDate.getTime() / 1000);
 
-      // Get saved trips from D1 and find the latest one after activation_time
-      let latestTrip = null;
+      // Get saved trips from D1 and find all trips after activation_time
+      let tripsAfterActivation = [];
       try {
         const savedTrips = await getSavedTrips(env);
         if (savedTrips.length > 0) {
-          const laterTrips = savedTrips.filter(trip => trip.time > activation_time);
-          if (laterTrips.length > 0) {
-            latestTrip = laterTrips.reduce((latest, current) => 
-              current.time > latest.time ? current : latest
-            );
-          }
+          tripsAfterActivation = savedTrips.filter(trip => trip.time > activation_time);
         }
       } catch (e) {
         console.error("Error fetching trips from D1:", e);
@@ -110,12 +105,12 @@ async function handleRequest(request, env) {
             "ticket_id": "375ae82f-9610-4f9f-a8c5-ee27b0ad11d0",
             "signature": "0jaKtnGWQwahPz1mJRGFpGdwOLNRqVqmhS4Qnsmm2dIM9mPKI5V8pbikhjK1000uTp0L0FIe+USYkxX4K9wrBg=="
           },
-          latestTrip
-        ].filter(trip => trip !== null),
+          ...tripsAfterActivation
+        ],
         "expiry_time": now + validPeriod
       }];
 
-      const logMessage = `[${new Date().toISOString()}] Fake Ticket Response (${latestTrip ? 'using D1 trip' : 'using default trip'}): ${JSON.stringify(fakeTicketResponse)}`;
+      const logMessage = `[${new Date().toISOString()}] Fake Ticket Response: ${JSON.stringify(fakeTicketResponse)}`;
       console.log(logMessage);
       if (env.D1_LOGS !== '0') await logToD1(env, logMessage);
 
