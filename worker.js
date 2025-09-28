@@ -66,7 +66,11 @@ async function handleRequest(request, env) {
       const now = Math.floor(Date.now() / 1000);
       const validPeriod = 30 * 24 * 60 * 60; // 30 days in seconds
       const ONE_DAY_IN_SECONDS = 24 * 60 * 60;
-      const activation_time = now - ONE_DAY_IN_SECONDS;
+
+      // Set activation time to today at 7:30
+      const nowDate = new Date();
+      nowDate.setHours(7, 30, 0, 0);
+      const activation_time = Math.floor(nowDate.getTime() / 1000);
 
       // Get saved trips from D1 and find the latest one after activation_time
       let latestTrip = null;
