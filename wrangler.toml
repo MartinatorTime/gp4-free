@@ -15,3 +15,6 @@ RANDOM_TICKET_ID = "1"
 ACT_AS_SERVER = "1"
 D1_LOGS = "0"
 REAL_API_URL = "https://rsps.westeurope.cloudapp.azure.com"
+
+[d1_databases]
+logs = { binding = "DB", database_id = "71f8947a-299e-49e2-8697-7dd4532efb1a" }
