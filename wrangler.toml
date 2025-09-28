@@ -19,3 +19,7 @@ REAL_API_URL = "https://rsps.westeurope.cloudapp.azure.com"
 [[d_databases]]
 binding = "DB"
 database_id = "71f8947a-299e-49e2-8697-7dd4532efb1a"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
