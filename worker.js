@@ -8,12 +8,11 @@ async function handleRequest(request, env) {
   const REAL_API_URL = 'https://rsps.westeurope.cloudapp.azure.com';
   const TIME_DEDUCT = parseInt(env.REGISTER_TIME_DEDUCT) || 0;
   const UNIX_DEDUCT = parseInt(env.UNIX_DEDUCT) || 0;
-  const REGISTER_DEDUCT = parseInt(env.REGISTER_DEDUCT) || 0; // New environment variable
-  const FAKE_TICKET = parseInt(env.FAKE_TICKET) || 0; // New environment variable for fake ticket
-  const RANDOM_TICKET_ID = parseInt(env.RANDOM_TICKET_ID) || 0; // New environment variable for randomizing vehicle numbers
+  const REGISTER_DEDUCT = parseInt(env.REGISTER_DEDUCT) || 0;
+  const FAKE_TICKET = parseInt(env.FAKE_TICKET) || 0;
+  const RANDOM_TICKET_ID = parseInt(env.RANDOM_TICKET_ID) || 0;
   const requestUrl = new URL(request.url);
 
-  // --- 1. Log Incoming Request from Client ---
   const logMessage1 = `--- New Request ---`;
   console.log(logMessage1);
   if (env.D1_LOGS !== '0') await logToD1(env, logMessage1);
@@ -41,7 +40,6 @@ async function handleRequest(request, env) {
     }
   }
 
-  // --- 2. Sanitize Headers Before Forwarding ---
   const headersToForward = new Headers(request.headers);
   const headersToRemove = [
     'cf-connecting-ip',
@@ -61,16 +59,31 @@ async function handleRequest(request, env) {
   console.log(logMessage6);
   if (env.D1_LOGS !== '0') await logToD1(env, logMessage6);
 
-  // --- 3. Forward the Sanitized Request to Origin Server ---
   const originUrl = REAL_API_URL + requestUrl.pathname + requestUrl.search;
 
-  // Check if FAKE_TICKET is enabled and intercept GET /api/Tickets/get
-  // This check is placed first to ensure it takes precedence and no request is sent to origin server
   if (FAKE_TICKET !== 0) {
     if (request.method === 'GET' && requestUrl.pathname === '/api/Tickets/get') {
       const now = Math.floor(Date.now() / 1000);
       const validPeriod = 30 * 24 * 60 * 60; // 30 days in seconds
-      const ONE_DAY_IN_SECONDS = 24 * 60 * 60; // 86400 seconds
+      const ONE_DAY_IN_SECONDS = 24 * 60 * 60;
+      const activation_time = now - ONE_DAY_IN_SECONDS;
+
+      // Get saved trips from D1 and find the latest one after activation_time
+      let latestTrip = null;
+      try {
+        const savedTrips = await getSavedTrips(env);
+        if (savedTrips.length > 0) {
+          const laterTrips = savedTrips.filter(trip => trip.time > activation_time);
+          if (laterTrips.length > 0) {
+            latestTrip = laterTrips.reduce((latest, current) => 
+              current.time > latest.time ? current : latest
+            );
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching trips from D1:", e);
+      }
+
       const fakeTicketResponse = [{
         "type_name": "timed_month",
         "valid_from": null,
@@ -84,9 +97,15 @@ async function handleRequest(request, env) {
         "batch_number": 40447,
         "is_annulled": false,
         "signed_ids": "Hma4mQm9fWxAZ7Aaua0l9HcyKqaV4/PuoJdaOfFAvQvs3TqeW0umeJ4Om3ghDmegiRZhwf3Tw3ur8iFxuRqJBQ==",
-        "activated": now - ONE_DAY_IN_SECONDS, // Set activated time to 1 day before current time
+        "activated": activation_time,
         "trips": [
-          {
+          latestTrip ? {
+            "id": latestTrip.id,
+            "time": latestTrip.time,
+            "vehicle_nr": latestTrip.vehicle_nr,
+            "ticket_id": latestTrip.ticket_id,
+            "signature": latestTrip.signature
+          } : {
             "id": "8440cbfe-b550-4c7c-97b6-e410940736ba",
             "time": now + validPeriod,
             "vehicle_nr": "17998",
@@ -97,7 +116,7 @@ async function handleRequest(request, env) {
         "expiry_time": now + validPeriod
       }];
 
-      const logMessage = `[${new Date().toISOString()}] Fake Ticket Response (no request to origin server): ${JSON.stringify(fakeTicketResponse)}`;
+      const logMessage = `[${new Date().toISOString()}] Fake Ticket Response (${latestTrip ? 'using D1 trip' : 'using default trip'}): ${JSON.stringify(fakeTicketResponse)}`;
       console.log(logMessage);
       if (env.D1_LOGS !== '0') await logToD1(env, logMessage);
 
@@ -108,11 +127,9 @@ async function handleRequest(request, env) {
     }
   }
 
-  // Check if ACT_AS_SERVER is set to 1 and intercept POST /api/Trip/register
   const IS_ACTING_AS_SERVER = env.ACT_AS_SERVER === '1';
   if (IS_ACTING_AS_SERVER) {
     if (request.method === 'POST' && requestUrl.pathname === '/api/Trip/register') {
-      // Apply REGISTER_DEDUCT only when ACT_AS_SERVER is 1
       if (REGISTER_DEDUCT !== 0) {
         try {
           const requestBodyJson = JSON.parse(requestBody);
@@ -124,23 +141,21 @@ async function handleRequest(request, env) {
       }
       
       try {
-        // Ensure trips table exists
         await createTripsTable(env);
         
         const requestBodyJson = JSON.parse(requestBody);
         
         const responseBody = {
           id: crypto.randomUUID(),
-          time: parseInt(requestBodyJson.time), // Ensure time is an integer
+          time: parseInt(requestBodyJson.time),
           vehicle_nr: requestBodyJson.vehicle_nr,
           ticket_id: requestBodyJson.ticket_id,
           signature: requestBodyJson.signature
         };
-        const logMessage7 = `[${new Date().toISOString()}] Origin Response Body: ${JSON.stringify(responseBody, null, 2)}`; // Pretty print the response body
+        const logMessage7 = `[${new Date().toISOString()}] Origin Response Body: ${JSON.stringify(responseBody, null, 2)}`;
         console.log(logMessage7);
         if (env.D1_LOGS !== '0') await logToD1(env, logMessage7);
         
-        // Save the trip data to D1 for later use
         await saveTripData(env, responseBody);
         
         return new Response(JSON.stringify(responseBody), {
@@ -155,13 +170,10 @@ async function handleRequest(request, env) {
       }
     }
 
-    // Check if ACT_AS_SERVER is set to 1 and intercept GET /api/Tickets/get
     if (request.method === 'GET' && requestUrl.pathname === '/api/Tickets/get') {
       try {
-        // Ensure trips table exists
         await createTripsTable(env);
         
-        // Fetch real ticket data from the origin server
         const originResponse = await fetch(REAL_API_URL + '/api/Tickets/get', {
           method: 'GET',
           headers: headersToForward
@@ -170,12 +182,9 @@ async function handleRequest(request, env) {
         if (originResponse.ok) {
           const ticketData = await originResponse.json();
           
-          // Get saved trips from D1
           const savedTrips = await getSavedTrips(env);
           
-          // Add saved trips to the ticket data
           if (ticketData.length > 0 && ticketData[0].trips && savedTrips.length > 0) {
-            // Add saved trips to the beginning of the trips array
             ticketData[0].trips = [...savedTrips, ...ticketData[0].trips];
           }
           
@@ -199,13 +208,11 @@ async function handleRequest(request, env) {
   const requestInit = {
     method: request.method,
     headers: headersToForward,
-    // Add the body back if it exists
     body: requestBody
   };
 
   const response = await fetch(originUrl, requestInit);
 
-  // --- 4. Log the Response from Origin Server ---
   const logMessage9 = `[${new Date().toISOString()}] Origin Response Status: ${response.status}`;
   console.log(logMessage9);
   if (env.D1_LOGS !== '0') await logToD1(env, logMessage9);
@@ -214,18 +221,15 @@ async function handleRequest(request, env) {
   console.log(logMessage10);
   if (env.D1_LOGS !== '0') await logToD1(env, logMessage10);
 
-  // Clone the response to be able to read the body for logging and for subsequent logic.
   const responseBody = await response.clone().text();
   const logMessage11 = `[${new Date().toISOString()}] Origin Response Body: ${responseBody}`;
   console.log(logMessage11);
   if (env.D1_LOGS !== '0') await logToD1(env, logMessage11);
 
-  // --- 5. Conditionally Modify the Response ---
   if (requestUrl.pathname === '/api/Tickets/get' && response.ok) {
     try {
       let responseBodyObj = JSON.parse(responseBody);
 
-      // When acting as server, get saved trips from D1 and prepend them
       if (env.ACT_AS_SERVER === '1') {
         const savedTrips = await getSavedTrips(env);
         if (savedTrips.length > 0 && responseBodyObj.length > 0 && responseBodyObj[0].trips) {
@@ -233,26 +237,22 @@ async function handleRequest(request, env) {
         }
       }
 
-      // Modify the first trip's time
       if (responseBodyObj.length > 0 && responseBodyObj[0].trips && responseBodyObj[0].trips.length > 0) {
         responseBodyObj[0].trips[0].time -= TIME_DEDUCT;
 
-        // Only randomize vehicle numbers if RANDOM_TICKET_ID is not zero
         if (RANDOM_TICKET_ID !== 0) {
           const logMessageRandom = `[${new Date().toISOString()}] Randomizing vehicle numbers as RANDOM_TICKET_ID is not zero`;
           console.log(logMessageRandom);
           if (env.D1_LOGS !== '0') await logToD1(env, logMessageRandom);
 
-          // Modify the vehicle_nr of all subsequent trips
           const prefixes = [17, 16, 57, 35];
           for (let i = 1; i < responseBodyObj[0].trips.length; i++) {
             const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
             const suffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
             responseBodyObj[0].trips[i].vehicle_nr = (prefix + suffix).toString();
 
-            // Modify the time of each trip
-            const timeOffset = Math.floor(Math.random() * (10 + 10)) - 10; // Random offset between -10 and +10 minutes
-            responseBodyObj[0].trips[i].time += timeOffset * 60; // Convert minutes to seconds
+            const timeOffset = Math.floor(Math.random() * (10 + 10)) - 10;
+            responseBodyObj[0].trips[i].time += timeOffset * 60;
           }
         }
       }
@@ -262,7 +262,6 @@ async function handleRequest(request, env) {
       console.log(logMessage12);
       if (env.D1_LOGS !== '0') await logToD1(env, logMessage12);
 
-      // Return a new response with the modified body
       return new Response(modifiedResponseBody, {
         status: response.status,
         headers: response.headers
@@ -272,12 +271,10 @@ async function handleRequest(request, env) {
       const logMessage13 = `[${new Date().toISOString()}] Error modifying JSON for /api/Tickets/get. Returning original response. ${e}`;
       console.error(logMessage13);
       if (env.D1_LOGS !== '0') await logToD1(env, logMessage13);
-      // If parsing or modification fails, return the original response to avoid errors.
       return response;
     }
   }
 
-  // Modify the response for GET /api/Tickets/get_unix_datetime
   if (requestUrl.pathname === '/api/Tickets/get_unix_datetime' && response.ok && UNIX_DEDUCT !== 0) {
     try {
       const responseBodyJson = JSON.parse(responseBody);
@@ -290,7 +287,6 @@ async function handleRequest(request, env) {
       console.log(logMessage14);
       if (env.D1_LOGS !== '0') await logToD1(env, logMessage14);
 
-      // Return a new response with the modified body
       return new Response(modifiedResponseBody, {
         status: response.status,
         headers: response.headers
@@ -300,19 +296,16 @@ async function handleRequest(request, env) {
       const logMessage15 = `[${new Date().toISOString()}] Error modifying JSON for /api/Tickets/get_unix_datetime. Returning original response. ${e}`;
       console.error(logMessage15);
       if (env.D1_LOGS !== '0') await logToD1(env, logMessage15);
-      // If parsing or modification fails, return the original response to avoid errors.
       return response;
     }
   }
 
-  // --- 6. Return the Original Response for all other requests ---
   const logMessage16 = `[${new Date().toISOString()}] Returning original response to client.`;
   console.log(logMessage16);
   if (env.D1_LOGS !== '0') await logToD1(env, logMessage16);
   return response;
 }
 
-// Function to log messages to D1
 async function logToD1(env, message) {
   const timestamp = new Date().toISOString();
   const stmt = env.DB.prepare('INSERT INTO logs (timestamp, message) VALUES (?, ?)');
@@ -320,13 +313,11 @@ async function logToD1(env, message) {
   await limitLogs(env);
 }
 
-// Function to limit logs to the last 50 entries
 async function limitLogs(env) {
   const stmt = env.DB.prepare('DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY id DESC LIMIT 50)');
   await stmt.run();
 }
 
-// Function to create trips table if it doesn't exist
 async function createTripsTable(env) {
   try {
     const stmt = env.DB.prepare(`
@@ -344,7 +335,6 @@ async function createTripsTable(env) {
   }
 }
 
-// Function to save trip data to D1
 async function saveTripData(env, tripData) {
   const stmt = env.DB.prepare('INSERT INTO trips (id, time, vehicle_nr, ticket_id, signature) VALUES (?, ?, ?, ?, ?)');
   await stmt.bind(
@@ -356,10 +346,8 @@ async function saveTripData(env, tripData) {
   ).run();
 }
 
-// Function to get saved trips from D1
 async function getSavedTrips(env) {
   try {
-    // Ensure trips table exists
     await createTripsTable(env);
     
     const stmt = env.DB.prepare('SELECT * FROM trips ORDER BY time DESC');
